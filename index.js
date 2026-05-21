@@ -30,7 +30,7 @@ async function run() {
   //  ROOT
   // =========================================================
   app.get('/', (req, res) => {
-    res.send('IdeaVault API is running 🚀');
+    res.send('IdeaVault API is running ');
   });
 
   // =========================================================
