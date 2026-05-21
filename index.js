@@ -37,7 +37,7 @@ async function run() {
   //  AUTH ROUTES
   // =========================================================
 
-  // Register (email/password)
+  // Register (password/email) - creates user, hashes password, returns JWT
   app.post('/api/auth/register', async (req, res) => {
     try {
       const { name, email, photoURL, password } = req.body;
