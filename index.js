@@ -112,9 +112,9 @@ async function run() {
       
       res.cookie(COOKIE_NAME, token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production', // true in production, false in development
+        secure: process.env.NODE_ENV === 'production', 
         sameSite: 'lax',
-        maxAge: 24 * 60 * 60 * 1000, // 1 day in milliseconds
+        maxAge: 24 * 60 * 60 * 1000, 
       });
 
       res.json({
