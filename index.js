@@ -133,7 +133,7 @@ async function run() {
     }
   });
 
-  // Google login — upserts the user, then issues a JWT
+  
   app.post('/api/auth/google', async (req, res) => {
     try {
       const { name, email, photoURL } = req.body;
@@ -159,12 +159,12 @@ async function run() {
 
       const token = generateToken(user);
 
-      // Set token in HTTP-Only cookie (expires in 1 day)
+    
       res.cookie(COOKIE_NAME, token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 24 * 60 * 60 * 1000, // 1 day in milliseconds
+        maxAge: 24 * 60 * 60 * 1000, 
       });
 
       res.json({
