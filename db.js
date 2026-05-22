@@ -12,7 +12,7 @@ const client = new MongoClient(uri, {
   },
 });
 
-// Cache the connected database so we connect only once
+
 let db = null;
 
 async function connectDB() {
