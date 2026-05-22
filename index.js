@@ -1,43 +1,39 @@
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const dotenv = require('dotenv');
 const bcrypt = require('bcryptjs');
 const { ObjectId } = require('mongodb');
 const { connectDB, getCollections } = require('./db');
-const { generateToken, verifyToken } = require('./middleware/auth');
+const { generateToken, protectRoute, COOKIE_NAME } = require('./middleware/auth');
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ---------- Middleware ----------
+
 app.use(
   cors({
-    origin: process.env. CLIENT_URL || '*',
+    origin: process.env.CLIENT_URL || '*',
     credentials: true,
   })
 );
 app.use(express.json());
+app.use(cookieParser());
 
-// ---------- Server bootstrap ----------
+
 async function run() {
   const db = await connectDB();
   const { usersCollection, ideasCollection, commentsCollection, bookmarksCollection } =
     getCollections(db);
 
-  // =========================================================
-  //  ROOT
-  // =========================================================
+
   app.get('/', (req, res) => {
     res.send('IdeaVault API is running ');
   });
 
-  // =========================================================
-  //  AUTH ROUTES
-  // =========================================================
-
-  // Register (password/email) - creates user, hashes password, returns JWT
+  
   app.post('/api/auth/register', async (req, res) => {
     try {
       const { name, email, photoURL, password } = req.body;
@@ -67,9 +63,16 @@ async function run() {
       const user = { ...newUser, _id: result.insertedId };
       const token = generateToken(user);
 
+      // Set token in HTTP-Only cookie (expires in 1 day)
+      res.cookie(COOKIE_NAME, token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 24 * 60 * 60 * 1000, // 1 day in milliseconds
+      });
+
       res.status(201).json({
         message: 'Registration successful',
-        token,
         user: {
           id: result.insertedId,
           name: user.name,
@@ -84,7 +87,7 @@ async function run() {
     }
   });
 
-  // Login (email/password)
+  
   app.post('/api/auth/login', async (req, res) => {
     try {
       const { email, password } = req.body;
@@ -103,11 +106,19 @@ async function run() {
         return res.status(401).json({ message: 'Invalid email or password' });
       }
 
+     
       const token = generateToken(user);
+
+      
+      res.cookie(COOKIE_NAME, token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production', // true in production, false in development
+        sameSite: 'lax',
+        maxAge: 24 * 60 * 60 * 1000, // 1 day in milliseconds
+      });
 
       res.json({
         message: 'Login successful',
-        token,
         user: {
           id: user._id,
           name: user.name,
@@ -148,9 +159,16 @@ async function run() {
 
       const token = generateToken(user);
 
+      // Set token in HTTP-Only cookie (expires in 1 day)
+      res.cookie(COOKIE_NAME, token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 24 * 60 * 60 * 1000, // 1 day in milliseconds
+      });
+
       res.json({
         message: 'Google login successful',
-        token,
         user: {
           id: user._id,
           name: user.name,
@@ -165,12 +183,22 @@ async function run() {
     }
   });
 
+  // Logout — clears the JWT cookie
+  app.post('/api/auth/logout', (req, res) => {
+    res.clearCookie(COOKIE_NAME, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+    });
+    res.json({ message: 'Logout successful' });
+  });
+
   // =========================================================
   //  USER PROFILE ROUTES
   // =========================================================
 
   // Get current user's profile
-  app.get('/api/users/me', verifyToken, async (req, res) => {
+  app.get('/api/users/me', protectRoute, async (req, res) => {
     try {
       const user = await usersCollection.findOne(
         { _id: new ObjectId(req.user.id) },
@@ -185,7 +213,7 @@ async function run() {
   });
 
   // Update profile
-  app.patch('/api/users/me', verifyToken, async (req, res) => {
+  app.patch('/api/users/me', protectRoute, async (req, res) => {
     try {
       const { name, photoURL, bio } = req.body;
       const updateFields = {};
@@ -293,7 +321,7 @@ async function run() {
   });
 
   // Create a new idea (protected)
-  app.post('/api/ideas', verifyToken, async (req, res) => {
+  app.post('/api/ideas', protectRoute, async (req, res) => {
     try {
       const {
         title,
@@ -346,7 +374,7 @@ async function run() {
   });
 
   // Update an idea (protected, owner only)
-  app.put('/api/ideas/:id', verifyToken, async (req, res) => {
+  app.put('/api/ideas/:id', protectRoute, async (req, res) => {
     try {
       const { id } = req.params;
       if (!ObjectId.isValid(id)) {
@@ -390,7 +418,7 @@ async function run() {
   });
 
   // Delete an idea (protected, owner only)
-  app.delete('/api/ideas/:id', verifyToken, async (req, res) => {
+  app.delete('/api/ideas/:id', protectRoute, async (req, res) => {
     try {
       const { id } = req.params;
       if (!ObjectId.isValid(id)) {
@@ -414,7 +442,7 @@ async function run() {
   });
 
   // Get ideas created by the logged-in user
-  app.get('/api/my-ideas', verifyToken, async (req, res) => {
+  app.get('/api/my-ideas', protectRoute, async (req, res) => {
     try {
       const ideas = await ideasCollection
         .find({ authorId: req.user.id })
@@ -428,7 +456,7 @@ async function run() {
   });
 
   // Toggle like on an idea (protected)
-  app.patch('/api/ideas/:id/like', verifyToken, async (req, res) => {
+  app.patch('/api/ideas/:id/like', protectRoute, async (req, res) => {
     try {
       const { id } = req.params;
       if (!ObjectId.isValid(id)) {
@@ -479,7 +507,7 @@ async function run() {
   });
 
   // Add a comment (protected)
-  app.post('/api/ideas/:id/comments', verifyToken, async (req, res) => {
+  app.post('/api/ideas/:id/comments', protectRoute, async (req, res) => {
     try {
       const { id } = req.params;
       const { text } = req.body;
@@ -517,7 +545,7 @@ async function run() {
   });
 
   // Edit a comment (protected, owner only)
-  app.put('/api/comments/:commentId', verifyToken, async (req, res) => {
+  app.put('/api/comments/:commentId', protectRoute, async (req, res) => {
     try {
       const { commentId } = req.params;
       const { text } = req.body;
@@ -553,7 +581,7 @@ async function run() {
   });
 
   // Delete a comment (protected, owner only)
-  app.delete('/api/comments/:commentId', verifyToken, async (req, res) => {
+  app.delete('/api/comments/:commentId', protectRoute, async (req, res) => {
     try {
       const { commentId } = req.params;
       if (!ObjectId.isValid(commentId)) {
@@ -590,7 +618,7 @@ async function run() {
   // =========================================================
 
   // All ideas the user has commented on
-  app.get('/api/my-interactions', verifyToken, async (req, res) => {
+  app.get('/api/my-interactions', protectRoute, async (req, res) => {
     try {
       const myComments = await commentsCollection
         .find({ userId: req.user.id })
@@ -617,7 +645,7 @@ async function run() {
   //  BOOKMARK ROUTES (optional feature)
   // =========================================================
 
-  app.get('/api/bookmarks', verifyToken, async (req, res) => {
+  app.get('/api/bookmarks', protectRoute, async (req, res) => {
     try {
       const bookmarks = await bookmarksCollection
         .find({ userId: req.user.id })
@@ -635,7 +663,7 @@ async function run() {
     }
   });
 
-  app.patch('/api/ideas/:id/bookmark', verifyToken, async (req, res) => {
+  app.patch('/api/ideas/:id/bookmark', protectRoute, async (req, res) => {
     try {
       const { id } = req.params;
       if (!ObjectId.isValid(id)) {

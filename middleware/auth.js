@@ -1,13 +1,19 @@
 const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_long_random_secret_here';
+const COOKIE_NAME = 'authToken';
 
-// Generate JWT token
-const generateToken = (userId, email) => {
+// Generate JWT token with 1 day expiration
+const generateToken = (user) => {
     const token = jwt.sign(
-        { userId, email },
+        {
+            id: user._id.toString(),
+            userId: user._id.toString(),
+            email: user.email,
+            name: user.name
+        },
         JWT_SECRET,
-        { expiresIn: '7d' }
+        { expiresIn: '1d' }
     );
     return token;
 };
@@ -22,7 +28,30 @@ const verifyToken = (token) => {
     }
 };
 
-// Middleware to check if user is authenticated
+// Protect routes middleware - extracts JWT from HTTP-Only cookie
+const protectRoute = (req, res, next) => {
+    const token = req.cookies[COOKIE_NAME];
+
+    if (!token) {
+        return res.status(401).json({ message: 'Access token required. Please login.' });
+    }
+
+    const decoded = verifyToken(token);
+    if (!decoded) {
+        return res.status(401).json({ message: 'Invalid or expired token. Please login again.' });
+    }
+
+    // Attach user data to request object for use in route handlers
+    req.user = {
+        id: decoded.id,
+        email: decoded.email,
+        name: decoded.name,
+    };
+
+    next();
+};
+
+// Legacy middleware for Authorization header (for backward compatibility if needed)
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -36,13 +65,19 @@ const authenticateToken = (req, res, next) => {
         return res.status(403).json({ message: 'Invalid or expired token' });
     }
 
-    req.userId = decoded.userId;
-    req.userEmail = decoded.email;
+    req.user = {
+        id: decoded.id,
+        userId: decoded.userId,
+        email: decoded.email,
+        name: decoded.name,
+    };
     next();
 };
 
 module.exports = {
     generateToken,
     verifyToken,
+    protectRoute,
     authenticateToken,
+    COOKIE_NAME,
 };
